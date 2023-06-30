@@ -47,23 +47,35 @@ def get_status_code(url):
         print("An unexpected error occurred:", e)
 
     return None
-
-def crawl_sitemap(url, writer):
-    valid = "Valid URL"
-    invalid = "Invalid URL"
+        
+def crawl_txt(url_file, writer, base_url='https://iprice-au.iprice.mx/'):
+    valid = "Valid Backref URL"
+    invalid = "Invalid Backref URL"
+    no_href = "No Href Found"
+    no_hreflang = "No Hreflang Found"
+    no_both = "No Hreflang and Href Found"
+    invalid_status = "Invalid Backref URL Status Code"
     na = "N/A"
     manual = "Need Manual Check"
     headers = {'User-Agent': random.choice(user_agents)}
-    response = requests.get(url, headers=headers, stream=True)
-    if 'Content-Disposition' in response.headers.keys():
-        decompressed_content = gzip.decompress(response.content)
-        soup = BeautifulSoup(decompressed_content, 'xml')
-    else:
-        soup = BeautifulSoup(response.content, 'xml')
-    urls = soup.find_all('loc')
 
-    for url in urls:
-        sitemap_url = url.get_text()
+    # Map of old URLs to their replacements
+    url_map = {
+        'https://iprice.hk/': 'https://iprice-hk.iprice.mx/',
+        'https://iprice.co.id/': 'https://iprice-id.iprice.mx/',
+        'https://iprice.my/': 'https://iprice-my.iprice.mx/',
+        'https://iprice.ph/': 'https://iprice-ph.iprice.mx/',
+        'https://iprice.sg/': 'https://iprice-sg.iprice.mx/',
+        'https://ipricethailand.com/': 'https://iprice-th.iprice.mx/',
+        'https://iprice.vn/': 'https://iprice-vn.iprice.mx/',
+        'https://iprice.au/': 'https://iprice-au.iprice.mx/'
+    }
+
+    with open(url_file, 'r') as f:
+        urls = f.read().splitlines()
+
+    for sub_url in urls:
+        sitemap_url = base_url + sub_url
         if sitemap_url in crawled_urls:
             print(f"Skipping URL (already crawled): {sitemap_url}")
             continue
@@ -74,50 +86,60 @@ def crawl_sitemap(url, writer):
         status_code = get_status_code(sitemap_url)
         if status_code is not None:
             print(f"  Status: {status_code}")
-            if status_code == 200:
-                print(f"  {valid}")
-                writer.writerow([sitemap_url, status_code, valid])
+            response = requests.get(sitemap_url, headers=headers)
+            soup = BeautifulSoup(response.content, 'html.parser')
+            link_tags = soup.find_all('link', rel='alternate')
+            if link_tags:
+                for link_tag in link_tags:
+                    hreflang = link_tag.get('hreflang')
+                    href = link_tag.get('href')
+                    # Replace old URLs with new ones
+                    for old_url, new_url in url_map.items():
+                        href = href.replace(old_url, new_url)
+                    print(f"  hreflang: {hreflang}, href: {href}")
+                    backref_status = get_status_code(href)
+                    if backref_status is not None:
+                        print(f"  Backref Status: {backref_status}")
+                        if backref_status == 200:
+                            valid_backrefs = set()  # Set to store unique valid backref URLs
+                            backref_soup = BeautifulSoup(requests.get(href, headers=headers).content, 'html.parser')
+                            backref_link_tags = backref_soup.find_all('link', rel='alternate')
+                            # Replace old URLs with new ones in backref_link_tags
+                            for tag in backref_link_tags:
+                                tag_href = tag.get('href')
+                                if tag_href:
+                                    for old_url, new_url in url_map.items():
+                                        tag_href = tag_href.replace(old_url, new_url)
+                                        tag['href'] = tag_href
+                                        if tag_href == sitemap_url:
+                                            valid_backrefs.add(tag_href)  # Add the valid backref URL to the set
+
+                            # Check if valid_backrefs contains any valid URLs
+                            if valid_backrefs:
+                                print(f"    {valid}")
+                                writer.writerow([sitemap_url, status_code, hreflang, href, backref_status, valid])
+                            else:
+                                print(f"    {invalid}")
+                                writer.writerow([sitemap_url, status_code, hreflang, href, backref_status, invalid])
+                        else:
+                            print(f"    {invalid_status}: {backref_status}")
+                            writer.writerow([sitemap_url, status_code, hreflang, href, backref_status, invalid_status])
+                    else:
+                        print(f"    {manual}")
+                        writer.writerow([sitemap_url, status_code, hreflang, href, na, manual])
             else:
-                print(f"  {invalid}")
-                writer.writerow([sitemap_url, status_code, invalid])
+                print(f"  {no_hreflang}")
+                writer.writerow([sitemap_url, status_code, no_href, no_hreflang, na, no_both])
         else:
             print(f"  {manual}")
-            writer.writerow([sitemap_url, na, manual])
-
-def crawl_sitemap_index(url, csv_file):
-    headers = {'User-Agent': random.choice(user_agents)}
-    response = requests.get(url, headers=headers)
-    soup = BeautifulSoup(response.content, 'xml')
-    sitemaps = soup.find_all('loc')
-
-    for sitemap in sitemaps:
-        sitemap_url = sitemap.get_text()
-        print(f"Crawling sitemap: {sitemap_url}")
-        if sitemap_url.endswith(".xml"):
-            crawl_sitemap(sitemap_url, csv_file)
-        else:
-            crawl_nested_sitemap(sitemap_url, csv_file)
-
-def crawl_nested_sitemap(url, csv_file):
-    headers = {'User-Agent': random.choice(user_agents)}
-    response = requests.get(url, headers=headers)
-    soup = BeautifulSoup(response.content, 'html.parser')
-    tbody = soup.find('tbody')
-    if tbody:
-        rows = tbody.find_all('tr')
-        for row in rows:
-            loc = row.find('td', class_='loc')
-            if loc:
-                child_sitemap_url = loc.find('a').get('href')
-                print(f"Crawling child sitemap: {child_sitemap_url}")
-                crawl_sitemap(child_sitemap_url, csv_file)
+            writer.writerow([sitemap_url, na, na, na, na, manual])
 
 def main():
     csv_filename = input("Enter the CSV filename to save/load data: ")
     csv_exists = os.path.exists(csv_filename)
 
     with open(csv_filename, 'a', newline='') as csv_file:
-        fieldnames = ['URL', 'URL Status Code', 'Information']
+        fieldnames = ['URL', 'URL Status Code', 'Hreflang', 'Href', 'Backref URL Status Code', 'Backref Information']
         writer = csv.writer(csv_file)
         if not csv_exists:
             writer.writerow(fieldnames)
@@ -135,8 +157,8 @@ def main():
                 for row in reader:
                     crawled_urls.add(row['URL'])
 
-        sitemap_index_url = input("Enter the sitemap index: ")
-        crawl_sitemap_index(sitemap_index_url, writer)
+        url_file = input("Enter the text file contains URL list: ")
+        crawl_txt(url_file, writer)
 
 if __name__ == "__main__":
     main()
