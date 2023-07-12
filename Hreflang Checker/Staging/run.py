@@ -33,7 +33,7 @@ def get_status_code(url):
     headers = {'User-Agent': random.choice(user_agents)}
     try:
         response = requests.get(url, headers=headers, timeout=30)
-        time.sleep(0.1)
+        time.sleep(1)
         return response.status_code
     except requests.exceptions.RequestException as err:
         print("RequestException error occurred:", err)
@@ -48,7 +48,7 @@ def get_status_code(url):
 
     return None
         
-def crawl_txt(url_file, writer, base_url='https://iprice-au.iprice.mx/'):
+def crawl_txt(url_file, writer):
     valid = "Valid Backref URL"
     invalid = "Invalid Backref URL"
     no_href = "No Href Found"
@@ -72,10 +72,11 @@ def crawl_txt(url_file, writer, base_url='https://iprice-au.iprice.mx/'):
     }
 
     with open(url_file, 'r') as f:
-        urls = f.read().splitlines()
+        urls = f.readlines()
 
-    for sub_url in urls:
-        sitemap_url = base_url + sub_url
+    for url in urls:
+        url = url.strip()
+        sitemap_url = url
         if sitemap_url in crawled_urls:
             print(f"Skipping URL (already crawled): {sitemap_url}")
             continue

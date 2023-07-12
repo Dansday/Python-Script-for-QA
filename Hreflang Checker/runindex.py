@@ -33,7 +33,7 @@ def get_status_code(url):
     headers = {'User-Agent': random.choice(user_agents)}
     try:
         response = requests.get(url, headers=headers, timeout=30)
-        time.sleep(0.1)
+        time.sleep(1)
         return response.status_code
     except requests.exceptions.RequestException as err:
         print("RequestException error occurred:", err)

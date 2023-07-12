@@ -1,6 +1,4 @@
 import requests
-import gzip
-from bs4 import BeautifulSoup
 import time
 import random
 import csv
@@ -48,69 +46,35 @@ def get_status_code(url):
 
     return None
 
-def crawl_sitemap(url, writer):
-    valid = "Valid URL"
-    invalid = "Invalid URL"
+def crawl_txt(url_file, writer):
+    valid = "Recached"
+    invalid = "Not Recached"
     na = "N/A"
     manual = "Need Manual Check"
-    headers = {'User-Agent': random.choice(user_agents)}
-    response = requests.get(url, headers=headers, stream=True)
-    if 'Content-Disposition' in response.headers.keys():
-        decompressed_content = gzip.decompress(response.content)
-        soup = BeautifulSoup(decompressed_content, 'xml')
-    else:
-        soup = BeautifulSoup(response.content, 'xml')
-    urls = soup.find_all('loc')
+    parameter = "?recache=1"
 
-    for url in urls:
-        sitemap_url = url.get_text()
-        if sitemap_url in crawled_urls:
-            print(f"Skipping URL (already crawled): {sitemap_url}")
-            continue
-        else:
-            crawled_urls.add(sitemap_url)
+    with open(url_file, 'r') as f:
+        urls = f.readlines()
 
-        print(f"Crawling URL: {sitemap_url}")
-        status_code = get_status_code(sitemap_url)
-        if status_code is not None:
-            print(f"  Status: {status_code}")
-            if status_code == 200:
-                print(f"  {valid}")
-                writer.writerow([sitemap_url, status_code, valid])
+        for url in urls:
+            url = url.strip()
+            if url in crawled_urls:
+                print(f"Skipping URL (already recache): {url}")
+                continue
             else:
-                print(f"  {invalid}")
-                writer.writerow([sitemap_url, status_code, invalid])
-        else:
-            print(f"  {manual}")
-            writer.writerow([sitemap_url, na, manual])
+                crawled_urls.add(url)
 
-def crawl_sitemap_index(url, csv_file):
-    headers = {'User-Agent': random.choice(user_agents)}
-    response = requests.get(url, headers=headers)
-    soup = BeautifulSoup(response.content, 'xml')
-    sitemaps = soup.find_all('loc')
-
-    for sitemap in sitemaps:
-        sitemap_url = sitemap.get_text()
-        print(f"Crawling sitemap: {sitemap_url}")
-        if sitemap_url.endswith(".xml"):
-            crawl_sitemap(sitemap_url, csv_file)
-        else:
-            crawl_nested_sitemap(sitemap_url, csv_file)
-
-def crawl_nested_sitemap(url, csv_file):
-    headers = {'User-Agent': random.choice(user_agents)}
-    response = requests.get(url, headers=headers)
-    soup = BeautifulSoup(response.content, 'html.parser')
-    tbody = soup.find('tbody')
-    if tbody:
-        rows = tbody.find_all('tr')
-        for row in rows:
-            loc = row.find('td', class_='loc')
-            if loc:
-                child_sitemap_url = loc.find('a').get('href')
-                print(f"Crawling child sitemap: {child_sitemap_url}")
-                crawl_sitemap(child_sitemap_url, csv_file)
+            recache_url = url + parameter
+            print(f"Crawling URL: {recache_url}")
+            status_code = get_status_code(recache_url)
+            if status_code is not None:
+                print(f"  Status: {status_code}")
+                if status_code == 200:
+                    writer.writerow([recache_url, status_code, valid])
+                else:
+                    writer.writerow([recache_url, status_code, invalid])
+            else:
+                writer.writerow([recache_url, na, manual])
 
 def main():
     csv_filename = input("Enter the CSV filename to save/load data: ")
@@ -129,14 +93,14 @@ def main():
         signal.signal(signal.SIGINT, signal_handler)
 
         if csv_exists:
-            print(f"Resuming from the last crawled URL in '{csv_filename}'...")
+            print(f"Resuming from the last recache URL in '{csv_filename}'...")
             with open(csv_filename, 'r') as existing_csv_file:
                 reader = csv.DictReader(existing_csv_file)
                 for row in reader:
                     crawled_urls.add(row['URL'])
 
-        sitemap_index_url = input("Enter the sitemap index: ")
-        crawl_sitemap_index(sitemap_index_url, writer)
+        txt_filename = input("Enter the text file contains URL list: ")
+        crawl_txt(txt_filename, writer)
 
 if __name__ == "__main__":
     main()
