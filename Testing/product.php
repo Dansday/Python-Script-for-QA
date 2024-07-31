@@ -36,7 +36,7 @@ class Product
 
     public function saveProduct()
     {
-        $db = new PDO(getenv('DB_DSN'), getenv('DB_USER'), getenv('DB_PASSWORD'));
+        $db = $this->getDatabaseConnection();
         $stmt = $db->prepare("UPDATE products SET name = :name, price = :price, description = :description, category = :category, inventory_count = :inventory_count WHERE id = :id");
         if (!$stmt->execute([
           ':name' => $this->prodName,
