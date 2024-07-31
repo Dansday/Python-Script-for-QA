@@ -7,6 +7,12 @@ import csv
 import os
 import signal
 import sys
+import certifi
+import logging
+from typing import Tuple, Optional
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 user_agents = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3",
@@ -29,35 +35,48 @@ user_agents = [
 
 crawled_urls = set()
 
-def get_status_code(url):
+def get_status_code(url: str) -> Tuple[Optional[int], Optional[str]]:
     headers = {'User-Agent': random.choice(user_agents)}
     try:
-        response = requests.get(url, headers=headers, timeout=30, allow_redirects=False)
+        response = requests.get(url, headers=headers, timeout=30, allow_redirects=False, verify=certifi.where())
         time.sleep(0.5)
-        if response.status_code == 301 or response.status_code == 302:
+        if response.status_code in [301, 302]:
             redirected_url = response.headers.get('Location')
             return response.status_code, redirected_url
         return response.status_code, url
     except requests.exceptions.RequestException as err:
-        print("RequestException error occurred:", err)
+        logging.error(f"RequestException error occurred: {err}")
     except requests.exceptions.HTTPError as errh:
-        print("HTTPError occurred:", errh)
+        logging.error(f"HTTPError occurred: {errh}")
     except requests.exceptions.ConnectionError as errc:
-        print("ConnectionError occurred:", errc)
+        logging.error(f"ConnectionError occurred: {errc}")
     except requests.exceptions.Timeout as errt:
-        print("Timeout error occurred:", errt)
+        logging.error(f"Timeout error occurred: {errt}")
     except Exception as e:
-        print("An unexpected error occurred:", e)
+        logging.error(f"An unexpected error occurred: {e}")
 
     return None, None
 
-def crawl_sitemap(url, writer):
-    valid = "Valid URL"
-    invalid = "Invalid URL"
-    na = "N/A"
-    manual = "Need Manual Check"
+def process_url(sitemap_url: str, writer: csv.writer):
+    status_code, final_url = get_status_code(sitemap_url)
+    if status_code is not None:
+        logging.info(f"  Status: {status_code}")
+        if status_code == 200:
+            logging.info(f"  Valid URL")
+            writer.writerow([final_url, status_code, "Valid URL"])
+        elif status_code in [301, 302]:
+            logging.info(f"  Redirect URL")
+            writer.writerow([sitemap_url, status_code, f"Redirect to {final_url}"])
+        else:
+            logging.info(f"  Invalid URL")
+            writer.writerow([sitemap_url, status_code, "Invalid URL"])
+    else:
+        logging.info(f"  Need Manual Check")
+        writer.writerow([sitemap_url, "N/A", "Need Manual Check"])
+
+def crawl_sitemap(url: str, writer: csv.writer):
     headers = {'User-Agent': random.choice(user_agents)}
-    response = requests.get(url, headers=headers, stream=True)
+    response = requests.get(url, headers=headers, stream=True, verify=certifi.where())
 
     if 'Content-Disposition' in response.headers.keys():
         decompressed_content = gzip.decompress(response.content)
@@ -69,34 +88,15 @@ def crawl_sitemap(url, writer):
     for url in urls:
         sitemap_url = url.get_text()
         if sitemap_url in crawled_urls:
-            print(f"Skipping URL (already crawled): {sitemap_url}")
+            logging.info(f"Skipping URL (already crawled): {sitemap_url}")
             continue
         else:
             crawled_urls.add(sitemap_url)
 
-        print(f"Crawling URL: {sitemap_url}")
-        status_code, final_url = get_status_code(sitemap_url)
-        if status_code is not None:
-            print(f"  Status: {status_code}")
-            if status_code == 200:
-                print(f"  Valid URL")
-                writer.writerow([final_url, status_code, valid])
-            elif status_code in [301, 302]:
-                print(f"  Redirect URL")
-                writer.writerow([sitemap_url, status_code, f"Redirect to {final_url}"])
-            else:
-                print(f"  Invalid URL")
-                writer.writerow([sitemap_url, status_code, invalid])
-        else:
-            print(f"  Need Manual Check")
-            writer.writerow([sitemap_url, na, manual])
+        logging.info(f"Crawling URL: {sitemap_url}")
+        process_url(sitemap_url, writer)
 
 def main():
-    valid = "Valid URL"
-    invalid = "Invalid URL"
-    na = "N/A"
-    manual = "Need Manual Check"
-
     csv_filename = input("Enter the CSV filename to save/load data: ")
     csv_exists = os.path.exists(csv_filename)
 
@@ -107,13 +107,13 @@ def main():
             writer.writerow(fieldnames)
 
         def signal_handler(signal, frame):
-            print("\nScript interrupted. Saving data and exiting...")
+            logging.info("\nScript interrupted. Saving data and exiting...")
             sys.exit(0)
 
         signal.signal(signal.SIGINT, signal_handler)
 
         if csv_exists:
-            print(f"Resuming from the last crawled URL in '{csv_filename}'...")
+            logging.info(f"Resuming from the last crawled URL in '{csv_filename}'...")
             with open(csv_filename, 'r') as existing_csv_file:
                 reader = csv.DictReader(existing_csv_file)
                 for row in reader:
@@ -133,27 +133,13 @@ def main():
                         url += '/'
                     full_url = f"{sitemap_host.rstrip('/')}/{url}"
                     if full_url in crawled_urls:
-                        print(f"Skipping URL (already crawled): {full_url}")
+                        logging.info(f"Skipping URL (already crawled): {full_url}")
                         continue
                     else:
                         crawled_urls.add(full_url)
 
-                    print(f"Crawling URL: {full_url}")
-                    status_code, final_url = get_status_code(full_url)
-                    if status_code is not None:
-                        print(f"  Status: {status_code}")
-                        if status_code == 200:
-                            print(f"  Valid URL")
-                            writer.writerow([final_url, status_code, valid])
-                        elif status_code in [301, 302]:
-                            print(f"  Redirect URL")
-                            writer.writerow([full_url, status_code, f"Redirect to {final_url}"])
-                        else:
-                            print(f"  Invalid URL")
-                            writer.writerow([full_url, status_code, invalid])
-                    else:
-                        print(f"  Need Manual Check")
-                        writer.writerow([full_url, na, manual])
+                    logging.info(f"Crawling URL: {full_url}")
+                    process_url(full_url, writer)
 
 if __name__ == "__main__":
     main()
