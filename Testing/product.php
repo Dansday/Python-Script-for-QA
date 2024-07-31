@@ -94,7 +94,7 @@ class Product
 
     public function getCatProds()
     {
-        $db = new PDO('mysql:host=localhost;dbname=testdb', 'root', '');
+        $db = new PDO(getenv('DB_DSN'), getenv('DB_USER'), getenv('DB_PASSWORD'));
         $stmt = $db->prepare("SELECT * FROM products WHERE category = :category AND id != :id");
         $stmt->execute([':category' => $this->category, ':id' => $this->prdId]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
