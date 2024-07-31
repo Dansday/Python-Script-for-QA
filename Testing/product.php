@@ -53,6 +53,11 @@ class Product
 
     public function decreaseInv($amt)
     {
+      if (!is_numeric($amt) || $amt < 0) {
+        throw new InvalidArgumentException('Amount must be a positive integer');
+      }
+    }
+    {
         if ($this->inventory >= $amt) {
             $db = new PDO(getenv('DB_DSN'), getenv('DB_USER'), getenv('DB_PASSWORD'));
             $db->beginTransaction();
