@@ -36,7 +36,7 @@ class Product
 
     public function saveProduct()
     {
-        $db = new PDO('mysql:host=localhost;dbname=testdb', 'root', '');
+        $db = new PDO(getenv('DB_DSN'), getenv('DB_USER'), getenv('DB_PASSWORD'));
         $stmt = $db->prepare("UPDATE products SET name = :name, price = :price, description = :description, category = :category, inventory_count = :inventory_count WHERE id = :id");
         $stmt->execute([
             ':name' => $this->prodName,
@@ -51,8 +51,16 @@ class Product
     public function decreaseInv($amt)
     {
         if ($this->inventory >= $amt) {
-            $this->inventory -= $amt;
-            $this->saveProduct();
+            $db = new PDO(getenv('DB_DSN'), getenv('DB_USER'), getenv('DB_PASSWORD'));
+            $db->beginTransaction();
+            try {
+                $this->inventory -= $amt;
+                $this->saveProduct();
+                $db->commit();
+            } catch (Exception $e) {
+                $db->rollBack();
+                throw $e;
+            }
         } else {
             throw new Exception('Not enough inventory');
         }
@@ -74,6 +82,9 @@ class Product
 
     public function applyDisc($perc)
     {
+        if ($perc < 0 || $perc > 100) {
+            throw new Exception('Invalid discount percentage');
+        }
         $this->price = $this->price * (1 - $perc / 100);
         $this->saveProduct();
     }
