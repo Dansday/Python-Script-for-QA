@@ -7,6 +7,9 @@ import csv
 import os
 import signal
 import sys
+import urllib3
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 user_agents = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3",
@@ -32,7 +35,7 @@ crawled_urls = set()
 def get_status_code(url):
     headers = {'User-Agent': random.choice(user_agents)}
     try:
-        response = requests.get(url, headers=headers, timeout=30, allow_redirects=False)
+        response = requests.get(url, headers=headers, timeout=30, allow_redirects=False, verify=False)
         time.sleep(0.5)
         if response.status_code == 301 or response.status_code == 302:
             redirected_url = response.headers.get('Location')
@@ -57,7 +60,7 @@ def crawl_sitemap(url, writer):
     na = "N/A"
     manual = "Need Manual Check"
     headers = {'User-Agent': random.choice(user_agents)}
-    response = requests.get(url, headers=headers, stream=True)
+    response = requests.get(url, headers=headers, stream=True, verify=False)
 
     if 'Content-Disposition' in response.headers.keys():
         decompressed_content = gzip.decompress(response.content)
