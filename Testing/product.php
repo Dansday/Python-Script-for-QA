@@ -38,13 +38,16 @@ class Product
     {
         $db = new PDO(getenv('DB_DSN'), getenv('DB_USER'), getenv('DB_PASSWORD'));
         $stmt = $db->prepare("UPDATE products SET name = :name, price = :price, description = :description, category = :category, inventory_count = :inventory_count WHERE id = :id");
-        $stmt->execute([
-            ':name' => $this->prodName,
-            ':price' => $this->price,
-            ':description' => $this->desc,
-            ':category' => $this->category,
-            ':inventory_count' => $this->inventory,
-            ':id' => $this->prdId
+        if (!$stmt->execute([
+          ':name' => $this->prodName,
+          ':price' => $this->price,
+          ':description' => $this->desc,
+          ':category' => $this->category,
+          ':inventory_count' => $this->inventory,
+          ':id' => $this->prdId
+        ])) {
+          throw new Exception('Failed to update product');
+        }
         ]);
     }
 
